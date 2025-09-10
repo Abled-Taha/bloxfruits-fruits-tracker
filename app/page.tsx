@@ -90,6 +90,36 @@ export default function Home() {
               </Link> */}
             </div>
           </article>
+
+          <article className="bf-card">
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span aria-hidden style={{ fontSize: 22 }}>🧮</span>
+              <h2 className="bf-h2" style={{ margin: 0 }}>Trade Calculator</h2>
+            </div>
+            <p className="bf-muted" style={{ marginTop: 8 }}>
+              Helps you in calculating your trades. Be sure not to be scammed by other players.
+            </p>
+            <div className="bf-btn-row" style={{ marginTop: 8 }}>
+              <Link href="https://fruityblox.com/trade-calculator" className="bf-btn bf-btn-primary">
+                Open Calculator
+              </Link>
+            </div>
+          </article>
+
+          {/* <article className="bf-card">
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span aria-hidden style={{ fontSize: 22 }}>🔐</span>
+              <h2 className="bf-h2" style={{ margin: 0 }}>Trade Saver</h2>
+            </div>
+            <p className="bf-muted" style={{ marginTop: 8 }}>
+              Remembers your trades for you. Never forget what you traded or with whom and when.
+            </p>
+            <div className="bf-btn-row" style={{ marginTop: 8 }}>
+              <Link href="/saver" className="bf-btn bf-btn-primary">
+                Open Trade Saver
+              </Link>
+            </div>
+          </article> */}
         </div>
       </section>
 
