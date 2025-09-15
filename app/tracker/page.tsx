@@ -3,19 +3,22 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 /* ----------------------------- Types ----------------------------- */
-type Fruit = { id: string; name: string };
+type FruitValue = { numeric: number; raw: string };
+type Fruit = { id: string; name: string; valueNumeric?: number; valueRaw?: string };
 type Account = { id: string; name: string; counts: Record<string, number> };
 type SaveShape = { v: 1; fruits: Fruit[]; accounts: Account[] };
 type SearchScope = "fruits" | "accounts" | "both";
 
 const STORAGE_KEY = "bloxfruit-tracker-v1";
+const VALUES_API = "https://bfscraper.app.abledtaha.online/fruits";
 
 /* ----------------------------- Utils ----------------------------- */
 const uid = () =>
   Math.random().toString(36).slice(2, 8) + "-" + Date.now().toString(36);
 
 const defaultFruits: Fruit[] = [
-  { id: "frt-dragon", name: "Dragon" },
+  { id: "frt-dragonEast", name: "Dragon East" },
+  { id: "frt-dragonWest", name: "Dragon West" },
   { id: "frt-kitsune", name: "Kitsune" },
   { id: "frt-yeti", name: "Yeti" },
   { id: "frt-leopard", name: "Leopard" },
@@ -30,7 +33,7 @@ const defaultFruits: Fruit[] = [
   { id: "frt-gravity", name: "Gravity" },
   { id: "frt-blizzard", name: "Blizzard" },
   { id: "frt-pain", name: "Pain" },
-  { id: "frt-lightning", name: "Lightning" },
+  { id: "frt-lightning", name: "Lightning" }, // API uses "Rumble"
   { id: "frt-portal", name: "Portal" },
   { id: "frt-phoenix", name: "Phoenix" },
   { id: "frt-sound", name: "Sound" },
@@ -81,6 +84,44 @@ function highlight(text: string, q: string) {
       {text.slice(idx + q.length)}
     </>
   );
+}
+
+// Nice compact formatter for totals (k/m/b)
+function formatCompact(n: number): string {
+  if (!isFinite(n) || n === 0) return "0";
+  const abs = Math.abs(n);
+  if (abs >= 1_000_000_000) return (n / 1_000_000_000).toFixed(n % 1_000_000_000 === 0 ? 0 : 2).replace(/\.00$/, "") + "b";
+  if (abs >= 1_000_000) return (n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1).replace(/\.0$/, "") + "m";
+  if (abs >= 1_000) return (n / 1_000).toFixed(n % 1_000 === 0 ? 0 : 1).replace(/\.0$/, "") + "k";
+  return String(n);
+}
+
+/* ----------------------------- API mapping helpers ----------------------------- */
+// Clean a fruit name to a comparable token
+function canon(s: string) {
+  return s.toLowerCase().replace(/[\s_\-]/g, "").trim();
+}
+// Some API names differ from your list. Map API -> your canonical names.
+const API_ALIASES: Record<string, string> = {
+  // API → Your fruit name
+  rumble: "Lightning",
+  trex: "Trex",
+  "t-rex": "Trex",
+  dragoneast: "Dragon East",
+  dragonwest: "Dragon West",
+};
+
+function mapApiNameToFruitName(apiName: string): string | null {
+  const c = canon(apiName);
+  if (API_ALIASES[c]) return API_ALIASES[c];
+
+  // Try direct canonical match against your fruit names
+  // (e.g., "phoenix", "quake", "magma", etc.)
+  const byCanon: Record<string, string> = {};
+  for (const f of defaultFruits) byCanon[canon(f.name)] = f.name;
+  if (byCanon[c]) return byCanon[c];
+
+  return null;
 }
 
 /* ----------------------------- Page ----------------------------- */
@@ -137,6 +178,53 @@ export default function TrackerPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  /* ----------------------------- Fetch & merge values ----------------------------- */
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        const res = await fetch(VALUES_API);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+
+        type ApiFruit = { name: string; values?: FruitValue[] };
+        const apiFruits: ApiFruit[] = Array.isArray(data?.fruits) ? data.fruits : [];
+
+        // Build a map from your Fruit.name -> {numeric, raw}, using the FIRST entry of values
+        const valueMap = new Map<string, FruitValue>();
+
+        for (const item of apiFruits) {
+          const targetName = mapApiNameToFruitName(item.name);
+          if (!targetName) continue;
+
+          const v0 = Array.isArray(item.values) && item.values.length > 0 ? item.values[0] : null;
+          if (!v0) continue;
+
+          // If multiple API entries map to the same fruit (e.g., Dragon East/West),
+          // keep the higher numeric value to be conservative.
+          const prev = valueMap.get(targetName);
+          if (!prev || (typeof v0.numeric === "number" && v0.numeric > (prev.numeric ?? 0))) {
+            valueMap.set(targetName, { numeric: v0.numeric, raw: v0.raw });
+          }
+        }
+
+        if (!isMounted) return;
+
+        setFruits((prev) =>
+          prev.map((f) => {
+            const v = valueMap.get(f.name);
+            return v ? { ...f, valueNumeric: v.numeric, valueRaw: v.raw } : f;
+          })
+        );
+      } catch (err) {
+        console.error("Failed to fetch fruit values:", err);
+      }
+    })();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   /* ----------------------------- Filtering ----------------------------- */
   const visibleFruits = useMemo(() => {
     if (scope === "accounts") return fruits; // don't filter fruits
@@ -164,6 +252,17 @@ export default function TrackerPage() {
     () => Object.values(totalsByFruitVisible).reduce((a, b) => a + b, 0),
     [totalsByFruitVisible]
   );
+
+  // Value totals (sum of counts * valueNumeric)
+  const grandValueVisible = useMemo(() => {
+    let sum = 0;
+    for (const f of visibleFruits) {
+      const count = totalsByFruitVisible[f.id] || 0;
+      const v = f.valueNumeric || 0;
+      sum += count * v;
+    }
+    return sum;
+  }, [visibleFruits, totalsByFruitVisible]);
 
   /* ----------------------------- Actions ----------------------------- */
   function addFruit() {
@@ -278,6 +377,10 @@ export default function TrackerPage() {
             {visibleAccounts.length}/{accounts.length}
           </div>
         </div>
+        <div className="bf-card">
+          <div className="bf-card-label">Visible Total Value</div>
+          <div className="bf-card-number">{formatCompact(grandValueVisible)}</div>
+        </div>
       </section>
 
       {/* Search bar + scope */}
@@ -329,47 +432,6 @@ export default function TrackerPage() {
         </div>
       </section>
 
-      {/* Manage Fruits */}
-      {/* <section className="bf-section">
-        <h2 className="bf-h2">Fruits</h2>
-        <div className="bf-inline-form">
-          <input
-            value={newFruitName}
-            onChange={(e) => setNewFruitName(e.target.value)}
-            placeholder="Add a fruit (e.g., Spirit)"
-            aria-label="Fruit name"
-            className="bf-input"
-          />
-          <button onClick={addFruit} className="bf-btn bf-btn-primary">
-            Add Fruit
-          </button>
-        </div>
-
-        {fruits.length === 0 ? (
-          <p className="bf-muted">No fruits yet — add a few to begin.</p>
-        ) : (
-          <ul className="bf-chips">
-            {visibleFruits.map((f) => (
-              <li key={f.id} className="bf-chip">
-                <input
-                  value={f.name}
-                  onChange={(e) => renameFruit(f.id, e.target.value)}
-                  aria-label={`Rename ${f.name}`}
-                  className="bf-chip-input"
-                />
-                <button
-                  onClick={() => removeFruit(f.id)}
-                  title="Remove fruit"
-                  className="bf-chip-remove"
-                >
-                  ✕
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section> */}
-
       {/* Manage Accounts */}
       <section className="bf-section">
         <h2 className="bf-h2">Accounts / Alts</h2>
@@ -381,7 +443,7 @@ export default function TrackerPage() {
             aria-label="Account name"
             className="bf-input"
           />
-          <button onClick={addAccount} className="bf-btn bf-btn-primary">
+        <button onClick={addAccount} className="bf-btn bf-btn-primary">
             Add Account
           </button>
         </div>
@@ -409,13 +471,21 @@ export default function TrackerPage() {
                     <th key={f.id} className="bf-th">
                       <div className="bf-th-col">
                         <span>{highlight(f.name, scope !== "accounts" ? query : "")}</span>
-                        <span className="bf-total-pill">
-                          total: {totalsByFruitVisible[f.id] || 0}
-                        </span>
+                        <div className="bf-th-meta">
+                          <span className="bf-total-pill">
+                            total: {totalsByFruitVisible[f.id] || 0}
+                          </span>
+                          {typeof f.valueRaw === "string" && (
+                            <span className="bf-value-pill" title="Market value (per fruit)">
+                              value: {f.valueRaw}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </th>
                   ))}
                   <th className="bf-th">Row Total</th>
+                  <th className="bf-th">Row Value</th>
                   <th className="bf-th">Actions</th>
                 </tr>
               </thead>
@@ -425,6 +495,12 @@ export default function TrackerPage() {
                     (sum, f) => sum + (a.counts[f.id] || 0),
                     0
                   );
+                  const rowValue = visibleFruits.reduce((sum, f) => {
+                    const cnt = a.counts[f.id] || 0;
+                    const val = f.valueNumeric || 0;
+                    return sum + cnt * val;
+                  }, 0);
+
                   return (
                     <tr key={a.id}>
                       <td className="bf-td bf-sticky-left">
@@ -473,6 +549,9 @@ export default function TrackerPage() {
                         );
                       })}
                       <td className="bf-td bf-td-number">{rowTotal}</td>
+                      <td className="bf-td bf-td-number" title="Sum of (count × value) across visible fruits">
+                        {formatCompact(rowValue)}
+                      </td>
                       <td className="bf-td">
                         <button
                           onClick={() => removeAccount(a.id)}
@@ -495,6 +574,9 @@ export default function TrackerPage() {
                   ))}
                   <td className="bf-td bf-td-number bf-strong">
                     {grandTotalVisible}
+                  </td>
+                  <td className="bf-td bf-td-number bf-strong" title="Grand total value for visible fruits & accounts">
+                    {formatCompact(grandValueVisible)}
                   </td>
                   <td className="bf-td" />
                 </tr>

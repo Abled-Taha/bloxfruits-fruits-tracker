@@ -120,6 +120,21 @@ export default function Home() {
               </Link>
             </div>
           </article> */}
+
+          {/* <article className="bf-card">
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span aria-hidden style={{ fontSize: 22 }}>💫</span>
+              <h2 className="bf-h2" style={{ margin: 0 }}>Gacha</h2>
+            </div>
+            <p className="bf-muted" style={{ marginTop: 8 }}>
+              Roll a fruit and see what you get! A fun way to simulate the gacha experience.
+            </p>
+            <div className="bf-btn-row" style={{ marginTop: 8 }}>
+              <Link href="/gacha" className="bf-btn bf-btn-primary">
+                Open Gacha
+              </Link>
+            </div>
+          </article> */}
         </div>
       </section>
 
