@@ -100,7 +100,7 @@ export default function Home() {
               Helps you in calculating your trades. Be sure not to be scammed by other players.
             </p>
             <div className="bf-btn-row" style={{ marginTop: 8 }}>
-              <Link href="https://fruityblox.com/trade-calculator" className="bf-btn bf-btn-primary">
+              <Link href="/calculator" className="bf-btn bf-btn-primary">
                 Open Calculator
               </Link>
             </div>
