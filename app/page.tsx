@@ -105,6 +105,21 @@ export default function Home() {
               </Link>
             </div>
           </article>
+
+          <article className="bf-card">
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span aria-hidden style={{ fontSize: 22 }}>💰</span>
+              <h2 className="bf-h2" style={{ margin: 0 }}>Trade</h2>
+            </div>
+            <p className="bf-muted" style={{ marginTop: 8 }}>
+              A simple trade interface to facilitate trading fruits with other players.
+            </p>
+            <div className="bf-btn-row" style={{ marginTop: 8 }}>
+              <Link href="/" className="bf-btn bf-btn-primary">
+                Open Trade
+              </Link>
+            </div>
+          </article>
         </div>
       </section>
     </main>

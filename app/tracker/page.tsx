@@ -265,35 +265,6 @@ export default function TrackerPage() {
   }, [visibleFruits, totalsByFruitVisible]);
 
   /* ----------------------------- Actions ----------------------------- */
-  function addFruit() {
-    const name = newFruitName.trim();
-    if (!name) return;
-    const id = "frt-" + name.toLowerCase().replace(/\s+/g, "-");
-    if (fruits.some((f) => f.name.toLowerCase() === name.toLowerCase())) {
-      setNewFruitName("");
-      return;
-    }
-    setFruits((prev) => [...prev, { id, name }]);
-    setNewFruitName("");
-  }
-
-  function removeFruit(fruitId: string) {
-    if (!confirm("Remove this fruit from the tracker?")) return;
-    setFruits((prev) => prev.filter((f) => f.id !== fruitId));
-    setAccounts((prev) =>
-      prev.map((a) => {
-        const { [fruitId]: _, ...rest } = a.counts;
-        return { ...a, counts: rest };
-      })
-    );
-  }
-
-  function renameFruit(fruitId: string, nextName: string) {
-    setFruits((prev) =>
-      prev.map((f) => (f.id === fruitId ? { ...f, name: nextName } : f))
-    );
-  }
-
   function addAccount() {
     const name = newAccountName.trim() || `Alt ${accounts.length}`;
     const acc: Account = { id: uid(), name, counts: {} };
