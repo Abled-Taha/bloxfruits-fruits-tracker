@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 
 /* ----------------------------- Types ----------------------------- */
 type FruitValue = { numeric: number; raw: string };
@@ -272,7 +273,7 @@ export default function TradeCalculatorPage() {
                 >
                   {slot.item ? (
                     <div className="tc-chip">
-                      <img src={slot.item.image} alt="" className="tc-chip-img" />
+                      <Image src={slot.item.image} alt="" className="tc-chip-img" width={40} height={40}/>
                       <div className="tc-chip-text">
                         <div className="tc-chip-name">
                           {slot.item.name}
@@ -329,7 +330,7 @@ export default function TradeCalculatorPage() {
                 >
                   {slot.item ? (
                     <div className="tc-chip">
-                      <img src={slot.item.image} alt="" className="tc-chip-img" />
+                      <Image src={slot.item.image} alt="" className="tc-chip-img" width={40} height={40}/>
                       <div className="tc-chip-text">
                         <div className="tc-chip-name">
                           {slot.item.name}
@@ -396,7 +397,7 @@ export default function TradeCalculatorPage() {
                   }}
                 >
                   <div className="tc-li-left">
-                    <img src={it.image} alt="" className="tc-li-img" />
+                    <Image src={it.image} alt="" className="tc-li-img" width={40} height={40}/>
                     <div className="tc-li-name">{it.name}</div>
                   </div>
                   <div className="tc-li-val">
@@ -425,7 +426,7 @@ export default function TradeCalculatorPage() {
                   }}
                 >
                   <div className="tc-li-left">
-                    <img src={it.image} alt="" className="tc-li-img" />
+                    <Image src={it.image} alt="" className="tc-li-img" width={40} height={40}/>
                     <div className="tc-li-name">{it.name}</div>
                   </div>
                   <div className="tc-li-val">Value: {it.valueRaw}</div>
