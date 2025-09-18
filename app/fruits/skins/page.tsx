@@ -33,6 +33,9 @@ function fruitImagePath(name: string, skinName?: string): string {
 
   const fruitFile = `fruits-${normalize(name)}`;
   if (skinName) {
+    if (skinName === "White") {
+      return '/images/NA.webp';
+    }
     return `${base}${fruitFile}-${normalize(skinName)}.webp`;
   }
   return `${base}${fruitFile}.webp`;
