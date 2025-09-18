@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "BFFT",
-  description: "BloxFruits Fruit Tracker",
+  description: "BloxFruits Tools (BFFT)",
 };
 
 export default function RootLayout({
@@ -29,7 +29,7 @@ export default function RootLayout({
           <nav className="bfft-nav">
             <Link href="/" className="bfft-brand" aria-label="BFFT Home">
               <span className="bfft-logo">🍍</span>
-              <span className="bfft-title">BFFT</span>
+              <span className="bfft-title">BloxFruits Tools (BFFT)</span>
             </Link>
 
             <div className="bfft-links">
