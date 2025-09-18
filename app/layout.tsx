@@ -37,6 +37,7 @@ export default function RootLayout({
               <Link href="/calculator" className="bfft-link">Trade Calculator</Link>
               <Link href="/stock" className="bfft-link">Stock</Link>
               <Link href="/fruits" className="bfft-link">Fruit Info</Link>
+              <Link href="/gacha" className="bfft-link">Gacha</Link>
             </div>
           </nav>
         </header>
