@@ -36,6 +36,7 @@ export default function RootLayout({
               <Link href="/tracker" className="bfft-link">Tracker</Link>
               <Link href="/calculator" className="bfft-link">Trade Calculator</Link>
               <Link href="/stock" className="bfft-link">Stock</Link>
+              <Link href="/fruits" className="bfft-link">Fruit Info</Link>
             </div>
           </nav>
         </header>

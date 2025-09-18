@@ -70,7 +70,7 @@ export default function Home() {
               reference while trading or planning your build.
             </p>
             <div className="bf-btn-row" style={{ marginTop: 8 }}>
-              <Link href="https://bloxfruitsvalues.com/values/fruits" className="bf-btn bf-btn-primary">
+              <Link href="/fruits" className="bf-btn bf-btn-primary">
                 Open Encyclopedia
               </Link>
             </div>
