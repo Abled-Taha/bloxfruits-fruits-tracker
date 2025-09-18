@@ -78,6 +78,21 @@ export default function Home() {
 
           <article className="bf-card">
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span aria-hidden style={{ fontSize: 22 }}>🌈</span>
+              <h2 className="bf-h2" style={{ margin: 0 }}>Skins</h2>
+            </div>
+            <p className="bf-muted" style={{ marginTop: 8 }}>
+              Browse every fruit’s skin variants and their details.
+            </p>
+            <div className="bf-btn-row" style={{ marginTop: 8 }}>
+              <Link href="/fruits/skins" className="bf-btn bf-btn-primary">
+                Open Skins
+              </Link>
+            </div>
+          </article>
+
+          <article className="bf-card">
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <span aria-hidden style={{ fontSize: 22 }}>💫</span>
               <h2 className="bf-h2" style={{ margin: 0 }}>Gacha</h2>
             </div>
@@ -87,6 +102,21 @@ export default function Home() {
             <div className="bf-btn-row" style={{ marginTop: 8 }}>
               <Link href="/gacha" className="bf-btn bf-btn-primary">
                 Open Gacha
+              </Link>
+            </div>
+          </article>
+
+          <article className="bf-card">
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span aria-hidden style={{ fontSize: 22 }}>📚</span>
+              <h2 className="bf-h2" style={{ margin: 0 }}>Resources</h2>
+            </div>
+            <p className="bf-muted" style={{ marginTop: 8 }}>
+              Useful external links and tools for Blox Fruits and Roblox.
+            </p>
+            <div className="bf-btn-row" style={{ marginTop: 8 }}>
+              <Link href="/resources" className="bf-btn bf-btn-primary">
+                Open Resources
               </Link>
             </div>
           </article>

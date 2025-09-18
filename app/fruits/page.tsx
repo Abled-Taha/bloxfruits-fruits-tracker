@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -35,9 +36,54 @@ function fruitImagePath(name: string): string {
   return `/images/fruits-${slug}.webp`;
 }
 
+function norm(s: string) {
+  return s.toLowerCase().normalize("NFKD");
+}
+function highlight(text: string, q: string) {
+  if (!q) return text;
+  const t = text;
+  const idx = t.toLowerCase().indexOf(q.toLowerCase());
+  if (idx === -1) return text;
+  return (
+    <>
+      {t.slice(0, idx)}
+      <mark>{t.slice(idx, idx + q.length)}</mark>
+      {t.slice(idx + q.length)}
+    </>
+  );
+}
+
 export default function FruitsPage() {
+  const router = useRouter();
   const [fruits, setFruits] = useState<FruitInfo[]>([]);
   const [selected, setSelected] = useState<FruitInfo | null>(null);
+  const [query, setQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (fruits.length === 0) return;
+    if (typeof window === "undefined") return;
+
+    const params = new URLSearchParams(window.location.search);
+    const qp = params.get("fruit");
+    if (!qp) return;
+
+    const found = fruits.find(
+      (f) => f.name.toLowerCase() === qp.toLowerCase()
+    );
+    if (found) setSelected(found);
+  }, [fruits]);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "/" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
 
   useEffect(() => {
     async function fetchData() {
@@ -52,6 +98,15 @@ export default function FruitsPage() {
     fetchData();
   }, []);
 
+  const filtered = useMemo(() => {
+    const q = norm(query).trim();
+    if (!q) return fruits;
+    return fruits.filter((f) => {
+      const hay = `${f.name} ${f.type} ${f.rarity}`;
+      return norm(hay).includes(q);
+    });
+  }, [fruits, query]);
+
   return (
     <main className="bf-wrap">
       <header className="bf-header" style={{ textAlign: "center" }}>
@@ -59,6 +114,32 @@ export default function FruitsPage() {
         <p className="bf-muted">Browse all fruits and tap to see details.</p>
       </header>
 
+      {/* Search */}
+      <section className="bf-section" aria-label="Search fruits">
+        <div className="bf-inline-form" style={{ gap: 8 }}>
+          <input
+            ref={searchRef}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by name, type, or rarity…"
+            aria-label="Search fruits"
+            className="bf-input"
+          />
+          {query && (
+            <button className="bf-btn" onClick={() => setQuery("")} title="Clear">
+              Clear
+            </button>
+          )}
+          <div className="bf-card" style={{ padding: "6px 10px", marginLeft: "auto" }}>
+            <div className="bf-card-label">Showing</div>
+            <div className="bf-card-number">
+              {filtered.length}/{fruits.length}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Grid */}
       <section
         className="bf-section"
         style={{
@@ -67,10 +148,16 @@ export default function FruitsPage() {
           gap: 16,
         }}
       >
-        {fruits.map((fruit) => (
+        {filtered.map((fruit) => (
           <button
             key={fruit.name}
-            onClick={() => setSelected(fruit)}
+            onClick={() => {
+              setSelected(fruit);
+              router.replace(
+                `${typeof window !== "undefined" ? window.location.pathname : "/fruits"}?fruit=${encodeURIComponent(fruit.name)}`,
+                { scroll: false }
+              );
+            }}
             style={{
               borderRadius: 14,
               background: "#1e2a38",
@@ -99,16 +186,30 @@ export default function FruitsPage() {
                 fontSize: 14,
               }}
             >
-              {fruit.name}
+              {highlight(fruit.name, query)}
+            </span>
+            <span className="bf-muted" style={{ fontSize: 12, marginTop: 4 }}>
+              {fruit.rarity} • {fruit.type}
             </span>
           </button>
         ))}
+        {filtered.length === 0 && (
+          <p className="bf-muted" style={{ gridColumn: "1/-1" }}>
+            No fruits match “{query}”.
+          </p>
+        )}
       </section>
 
       {/* Modal */}
       {selected && (
         <div
-          onClick={() => setSelected(null)}
+          onClick={() => {
+            setSelected(null);
+            router.replace(
+              `${typeof window !== "undefined" ? window.location.pathname : "/fruits"}`,
+              { scroll: false }
+            );
+          }}
           style={{
             position: "fixed",
             inset: 0,
@@ -150,12 +251,22 @@ export default function FruitsPage() {
             </div>
 
             <div style={{ marginTop: 12, fontSize: 14, color: "#cfd9ff" }}>
-              <div><b>Type:</b> {selected.type}</div>
-              <div><b>Rarity:</b> {selected.rarity}</div>
-              <div><b>Price:</b> {selected.price.toLocaleString()} Beli</div>
-              <div><b>Robux:</b> {selected.robux_price}</div>
+              <div>
+                <b>Type:</b> {selected.type}
+              </div>
+              <div>
+                <b>Rarity:</b> {selected.rarity}
+              </div>
+              <div>
+                <b>Price:</b> {selected.price.toLocaleString()} Beli
+              </div>
+              <div>
+                <b>Robux:</b> {selected.robux_price}
+              </div>
               {selected.awakening > 0 && (
-                <div><b>Awakening:</b> {selected.awakening} Fragments</div>
+                <div>
+                  <b>Awakening:</b> {selected.awakening} Fragments
+                </div>
               )}
             </div>
 
@@ -200,10 +311,14 @@ export default function FruitsPage() {
             )}
 
             <div style={{ marginTop: 16, textAlign: "right" }}>
-              <button
-                onClick={() => setSelected(null)}
-                className="bf-btn bf-btn-danger"
-              >
+              <button onClick={() => {
+                setSelected(null);
+                router.replace(
+                  `${typeof window !== "undefined" ? window.location.pathname : "/fruits"}`,
+                  { scroll: false }
+                );
+              }}
+              className="bf-btn bf-btn-danger">
                 Close
               </button>
             </div>

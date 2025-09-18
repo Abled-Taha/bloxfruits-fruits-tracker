@@ -38,6 +38,7 @@ export default function RootLayout({
               <Link href="/stock" className="bfft-link">Stock</Link>
               <Link href="/fruits" className="bfft-link">Fruit Info</Link>
               <Link href="/gacha" className="bfft-link">Gacha</Link>
+              <Link href="/resources" className="bfft-link">Resources</Link>
             </div>
           </nav>
         </header>

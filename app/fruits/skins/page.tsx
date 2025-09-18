@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 
@@ -51,6 +51,19 @@ function SkinsView() {
   const searchParams = useSearchParams();
   const fruitParam = searchParams.get("fruit");
   const skinParam = searchParams.get("skin");
+  const [query, setQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "/" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -83,9 +96,17 @@ function SkinsView() {
     };
   }, [fruitParam, skinParam]);
 
-  const entries = fruits.flatMap((fruit) =>
-    fruit.skins.map((skin) => ({ fruit, skin }))
-  );
+  const entries = fruits
+   .flatMap((fruit) => fruit.skins.map((skin) => ({ fruit, skin })))
+   .filter(({ fruit, skin }) => {
+     const q = query.toLowerCase().trim();
+     if (!q) return true;
+     return (
+       fruit.name.toLowerCase().includes(q) ||
+       skin.name.toLowerCase().includes(q) ||
+       skin.rarity.toLowerCase().includes(q)
+     );
+   });
 
   return (
     <main className="bf-wrap">
@@ -93,6 +114,17 @@ function SkinsView() {
         <h1 className="bf-h1">Fruit Skins</h1>
         <p className="bf-muted">Browse all skins. Click to see full details.</p>
       </header>
+
+      <div className="bf-inline-form" style={{ marginBottom: 16 }}>
+        <input
+          ref={searchRef}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search skins or fruits…"
+          aria-label="Search skins"
+          className="bf-input"
+        />
+      </div>
 
       {entries.length === 0 ? (
         <p className="bf-muted">No skins found.</p>
