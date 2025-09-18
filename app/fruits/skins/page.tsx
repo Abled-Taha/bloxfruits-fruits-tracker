@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 
@@ -26,6 +26,8 @@ type FruitInfo = {
 
 const API_URL = "https://bfscraper.app.abledtaha.online/info";
 
+export const dynamic = "force-dynamic";
+
 function fruitImagePath(name: string, skinName?: string): string {
   const base = "/images/";
   const normalize = (str: string) =>
@@ -34,14 +36,15 @@ function fruitImagePath(name: string, skinName?: string): string {
   const fruitFile = `fruits-${normalize(name)}`;
   if (skinName) {
     if (skinName === "White") {
-      return '/images/NA.webp';
+      return "/images/NA.webp";
     }
     return `${base}${fruitFile}-${normalize(skinName)}.webp`;
   }
   return `${base}${fruitFile}.webp`;
 }
 
-export default function SkinsPage() {
+/* -------- Inner view that uses useSearchParams() (must be in Suspense) -------- */
+function SkinsView() {
   const [fruits, setFruits] = useState<FruitInfo[]>([]);
   const [selected, setSelected] = useState<{ fruit: FruitInfo; skin: Skin } | null>(null);
 
@@ -50,11 +53,13 @@ export default function SkinsPage() {
   const skinParam = searchParams.get("skin");
 
   useEffect(() => {
-    async function fetchData() {
+    let alive = true;
+    (async () => {
       try {
         const res = await fetch(API_URL);
         const data: FruitInfo[] = await res.json();
         const withSkins = data.filter((f) => f.skins && f.skins.length > 0);
+        if (!alive) return;
         setFruits(withSkins);
 
         // Auto-select if params are present
@@ -72,8 +77,10 @@ export default function SkinsPage() {
       } catch (err) {
         console.error("Failed to fetch skins:", err);
       }
-    }
-    fetchData();
+    })();
+    return () => {
+      alive = false;
+    };
   }, [fruitParam, skinParam]);
 
   const entries = fruits.flatMap((fruit) =>
@@ -176,9 +183,15 @@ export default function SkinsPage() {
             </div>
 
             <div style={{ marginTop: 12, fontSize: 14, color: "#cfd9ff" }}>
-              <div><b>Fruit:</b> {selected.fruit.name}</div>
-              <div><b>Rarity:</b> {selected.skin.rarity}</div>
-              <div><b>Chromatic:</b> {selected.skin.chromatic ? "Yes" : "No"}</div>
+              <div>
+                <b>Fruit:</b> {selected.fruit.name}
+              </div>
+              <div>
+                <b>Rarity:</b> {selected.skin.rarity}
+              </div>
+              <div>
+                <b>Chromatic:</b> {selected.skin.chromatic ? "Yes" : "No"}
+              </div>
               {selected.skin.obtainment && (
                 <div style={{ marginTop: 8 }}>
                   <b>Obtainment:</b> {selected.skin.obtainment}
@@ -187,10 +200,7 @@ export default function SkinsPage() {
             </div>
 
             <div style={{ marginTop: 16, textAlign: "right" }}>
-              <button
-                onClick={() => setSelected(null)}
-                className="bf-btn bf-btn-danger"
-              >
+              <button onClick={() => setSelected(null)} className="bf-btn bf-btn-danger">
                 Close
               </button>
             </div>
@@ -198,5 +208,20 @@ export default function SkinsPage() {
         </div>
       )}
     </main>
+  );
+}
+
+/* -------- Page wrapper with Suspense boundary -------- */
+export default function Page() {
+  return (
+    <Suspense
+      fallback={
+        <main className="bf-wrap">
+          <p className="bf-muted">Loading skins…</p>
+        </main>
+      }
+    >
+      <SkinsView />
+    </Suspense>
   );
 }
