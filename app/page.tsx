@@ -54,7 +54,7 @@ export default function Home() {
               and may be temporarily unavailable — we show clear error states.)
             </p>
             <div className="bf-btn-row" style={{ marginTop: 8 }}>
-              <Link href="https://fruityblox.com/stock" className="bf-btn bf-btn-primary">
+              <Link href="/stock" className="bf-btn bf-btn-primary">
                 View Stock
               </Link>
             </div>
