@@ -40,3 +40,4 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 ---
 1. skin values
 2. add skins in trading
+3. add skins in tracker
