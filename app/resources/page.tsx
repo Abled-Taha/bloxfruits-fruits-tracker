@@ -26,6 +26,12 @@ export default function ResourcesPage() {
       description:
         "Official Roblox developer forum with guides, announcements, and community help.",
     },
+    {
+      name: "Get Stock Pings",
+      url: "https://discord.gg/92qhRJjKrQ",
+      description:
+        "Join our Discord server for pings on the fruits of your choice when they are in stock.",
+    },
   ];
 
   return (
