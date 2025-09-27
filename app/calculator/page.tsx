@@ -23,6 +23,7 @@ type Item = {
 type Slot = { id: string; item?: Item; permanent?: boolean };
 
 const VALUES_API = "https://bfscraper.app.abledtaha.online/fruits";
+// const VALUES_API = "http://localhost:5000/fruits";
 
 /* ----------------------------- Helpers ----------------------------- */
 const uid = () =>
