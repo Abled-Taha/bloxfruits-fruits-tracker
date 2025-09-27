@@ -4,48 +4,87 @@ import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 
 /* ----------------------------- Types ----------------------------- */
-type FruitValue = { numeric: number; raw: string };
-type ApiFruit = { name: string; values?: FruitValue[] };
-type ApiGamepass = { name: string; values?: FruitValue[] };
+type NewApiSkin = {
+  name: string;
+  regValue?: number;
+  tradable?: boolean;
+  tradeable?: boolean;
+  tradeadble?: boolean;
+  image?: string;
+  ingame_image?: string;
+  robuxValue?: number;
+};
+
+type NewApiFruit = {
+  name: string;
+  regValue?: number;
+  permValue?: number;
+  robuxValue?: number;
+  skins?: NewApiSkin[];
+};
+
+type NewApiGamepass = {
+  name: string;
+  regValue?: number;
+  robuxValue?: number;
+};
 
 type Item = {
   kind: "fruit" | "gamepass";
   name: string;
-  // normal (values[0])
   valueNumeric: number;
   valueRaw: string;
-  // permanent (values[1]) - fruits only
   permNumeric?: number;
   permRaw?: string;
-  image: string; // /images/*.webp
+  robuxNumeric: number;
+  image: string;
 };
 
 type Slot = { id: string; item?: Item; permanent?: boolean };
 
-const VALUES_API = "https://bfscraper.app.abledtaha.online/fruits";
-// const VALUES_API = "http://localhost:5000/fruits";
+const VALUES_API = "https://bfscraper.app.abledtaha.online/all";
 
 /* ----------------------------- Helpers ----------------------------- */
 const uid = () =>
   Math.random().toString(36).slice(2, 8) + "-" + Date.now().toString(36);
 
-const canon = (s: string) => s.toLowerCase().replace(/[\s_\-]/g, "").trim();
-const toCamel = (s: string) =>
-  s
-    .toLowerCase()
-    .replace(/[-_\s]+(.)/g, (_m, c: string) => c.toUpperCase())
-    .replace(/^(.)/, (m) => m.toLowerCase());
-
+const canon = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "").trim();
 const slug = (s: string) =>
   s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 
-/** REQUIRED by you */
-const API_ALIASES: Record<string, string> = {
+// Compact currency format
+const moneyFmt = new Intl.NumberFormat(undefined, {
+  notation: "compact",
+  maximumFractionDigits: 1,
+});
+const money = (n: number | undefined | null) => `$${moneyFmt.format(n ?? 0)}`;
+
+const robuxFmt = new Intl.NumberFormat();
+const robux = (n: number | undefined | null) => `${robuxFmt.format(n ?? 0)} R$`;
+
+const FRUIT_ALIASES: Record<string, string> = {
   rumble: "Lightning",
   trex: "Trex",
-  "t-rex": "Trex",
-  dragonEast: "Dragon East",
-  dragonWest: "Dragon West",
+  t_rex: "Trex",
+  trex1: "Trex",
+  dragon_east: "Dragon East",
+  dragoneast: "Dragon East",
+  eastdragon: "Dragon East",
+  dragon_west: "Dragon West",
+  dragonwest: "Dragon West",
+  westdragon: "Dragon West",
+};
+
+const GAMEPASS_ALIASES: Record<string, string> = {
+  "2xbossdrops": "2x boss drops",
+  "2xmastery": "2x mastery",
+  "2xmoney": "2x money",
+  darkblade: "dark blade",
+  fastboats: "fast boats",
+  fruitnotifier: "fruit notifier",
+  "+1fruitstorage": "fruit storage",
+  "1fruitstorage": "fruit storage",
+  fruitstorage: "fruit storage",
 };
 
 const DEFAULT_FRUIT_NAMES = [
@@ -65,7 +104,6 @@ const DEFAULT_GAMEPASSES = [
   "fruit storage",
 ];
 
-/** Local image paths */
 function fruitImagePath(displayName: string): string {
   if (displayName === "Lightning") return "/images/fruits-rumble.webp";
   if (displayName === "Trex") return "/images/fruits-t-rex.webp";
@@ -73,26 +111,46 @@ function fruitImagePath(displayName: string): string {
   if (displayName === "Dragon West") return "/images/fruits-dragon-west.webp";
   return `/images/fruits-${slug(displayName)}.webp`;
 }
+
 function gamepassImagePath(name: string): string {
   return `/images/gamepasses-${slug(name)}.webp`;
 }
 
+// Collapse Dragon East/West → Dragon for skins
+function normalizeSkinParent(display: string): string {
+  const d = display.trim();
+  return d === "Dragon East" || d === "Dragon West" ? "Dragon" : d;
+}
+
+// skins use: fruits-<parent>-<skin>.webp (with Dragon collapsed)
+function skinImagePath(parentDisplay: string, skinName: string): string {
+  let base = slug(normalizeSkinParent(parentDisplay));
+  return `/images/fruits-${base}-${slug(skinName)}.webp`;
+}
+
+function resolveDisplayName(apiName: string, candidates: string[], aliasMap: Record<string,string>) {
+  const c = canon(apiName);
+  if (aliasMap[c]) return aliasMap[c];
+  const hit = candidates.find((n) => canon(n) === c);
+  if (hit) return hit;
+  if (c === "t_rex" || c === "t-rex" || c === "trex") return "Trex";
+  return apiName;
+}
+
+// normalize misspellings/variants of "tradable"
+function isTradable(s: NewApiSkin): boolean {
+  return Boolean(s.tradable ?? s.tradeable ?? s.tradeadble ?? false);
+}
+
 /* ----------------------------- Component ----------------------------- */
 export default function TradeCalculatorPage() {
-  // 4 slots per side
-  const [your, setYour] = useState<Slot[]>(
-    () => Array.from({ length: 4 }, () => ({ id: uid() }))
-  );
-  const [wanted, setWanted] = useState<Slot[]>(
-    () => Array.from({ length: 4 }, () => ({ id: uid() }))
-  );
+  const [your, setYour] = useState<Slot[]>(() => Array.from({ length: 4 }, () => ({ id: uid() })));
+  const [wanted, setWanted] = useState<Slot[]>(() => Array.from({ length: 4 }, () => ({ id: uid() })));
 
   const [allItems, setAllItems] = useState<Item[]>([]);
-  const [pickerOpen, setPickerOpen] =
-    useState<null | { side: "your" | "wanted"; index: number }>(null);
+  const [pickerOpen, setPickerOpen] = useState<null | { side: "your" | "wanted"; index: number }>(null);
   const [query, setQuery] = useState("");
 
-  /* -------- Fetch values (FIRST values[0], PERM = values[1]) -------- */
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -100,91 +158,93 @@ export default function TradeCalculatorPage() {
         const res = await fetch(VALUES_API);
         const data = await res.json();
 
-        const apiFruits: ApiFruit[] = Array.isArray(data?.fruits)
-          ? data.fruits
-          : [];
-        const apiGamepasses: ApiGamepass[] = Array.isArray(data?.gamepasses)
-          ? data.gamepasses
-          : [];
+        const apiFruits: NewApiFruit[] = Array.isArray(data?.fruits) ? data.fruits : [];
+        const apiGamepasses: NewApiGamepass[] = Array.isArray(data?.gamepasses) ? data.gamepasses : [];
 
-        // Build display-name → {v0, v1} map (no merging; East/West are separate)
-        const byDisplay = new Map<
-          string,
-          { v0?: FruitValue; v1?: FruitValue }
-        >();
-
-        for (const af of apiFruits) {
-          const keyCamel = toCamel(af.name);
-          const keyCanon = canon(af.name);
-          const display =
-            API_ALIASES[keyCamel] ||
-            API_ALIASES[keyCanon] ||
-            DEFAULT_FRUIT_NAMES.find((n) => canon(n) === keyCanon) ||
-            null;
-          if (!display) continue;
-
-          const v0 =
-            Array.isArray(af.values) && af.values.length > 0
-              ? af.values[0]
-              : undefined;
-          const v1 =
-            Array.isArray(af.values) && af.values.length > 1
-              ? af.values[1]
-              : undefined;
-
-          byDisplay.set(display, { v0, v1 });
+        // Fruits
+        const fruitByDisplay = new Map<string, { reg: number; perm?: number; robux: number }>();
+        for (const f of apiFruits) {
+          const display = resolveDisplayName(f.name, DEFAULT_FRUIT_NAMES, FRUIT_ALIASES);
+          const prev = fruitByDisplay.get(display) || { reg: 0, robux: 0 };
+          fruitByDisplay.set(display, {
+            reg: f.regValue ?? prev.reg,
+            perm: f.permValue ?? prev.perm,
+            robux: f.robuxValue ?? prev.robux,
+          });
         }
 
-        // Fruits in preferred order; default 0s if missing
+        // Skins
+        const skinItems: Item[] = [];
+        for (const f of apiFruits) {
+          let parent = resolveDisplayName(f.name, DEFAULT_FRUIT_NAMES, FRUIT_ALIASES);
+          parent = normalizeSkinParent(parent);
+          const skins = Array.isArray(f.skins) ? f.skins : [];
+          for (const s of skins) {
+            if (!isTradable(s)) continue;
+            const skinDisplay = `${parent} • ${s.name} (Skin)`;
+            const reg = s.regValue ?? 0;
+            const rb = s.robuxValue ?? 0;
+            const img = skinImagePath(parent, s.name) || fruitImagePath(parent);
+            skinItems.push({
+              kind: "fruit",
+              name: skinDisplay,
+              valueNumeric: reg,
+              valueRaw: money(reg),
+              robuxNumeric: rb,
+              image: img,
+            });
+          }
+        }
+
         const fruitItems: Item[] = DEFAULT_FRUIT_NAMES.map((display) => {
-          const v = byDisplay.get(display);
+          const v = fruitByDisplay.get(display) ?? { reg: 0, robux: 0 };
           return {
             kind: "fruit",
             name: display,
-            valueNumeric: v?.v0?.numeric ?? 0,
-            valueRaw: v?.v0?.raw ?? "0",
-            permNumeric: v?.v1?.numeric,
-            permRaw: v?.v1?.raw,
+            valueNumeric: v.reg,
+            valueRaw: money(v.reg),
+            permNumeric: v.perm,
+            permRaw: v.perm != null ? money(v.perm) : undefined,
+            robuxNumeric: v.robux,
             image: fruitImagePath(display),
           };
         });
 
-        // Gamepasses (values[1] doesn't exist)
-        const gpLookup = new Map<string, FruitValue>();
+        // Gamepasses
+        const gpLookup = new Map<string, { reg: number; robux: number }>();
         for (const gp of apiGamepasses) {
-          const v0 =
-            Array.isArray(gp.values) && gp.values.length > 0
-              ? gp.values[0]
-              : undefined;
-          if (v0) gpLookup.set(gp.name, v0);
+          const display = resolveDisplayName(gp.name, DEFAULT_GAMEPASSES, GAMEPASS_ALIASES);
+          gpLookup.set(canon(display), { reg: gp.regValue ?? 0, robux: gp.robuxValue ?? 0 });
         }
         const gamepassItems: Item[] = DEFAULT_GAMEPASSES.map((name) => {
-          const v = gpLookup.get(name);
+          const v = gpLookup.get(canon(name)) ?? { reg: 0, robux: 0 };
           return {
             kind: "gamepass",
             name,
-            valueNumeric: v?.numeric ?? 0,
-            valueRaw: v?.raw ?? "0",
+            valueNumeric: v.reg,
+            valueRaw: money(v.reg),
+            robuxNumeric: v.robux,
             image: gamepassImagePath(name),
           };
         });
 
-        const combined = [...fruitItems, ...gamepassItems];
+        const combined = [...fruitItems, ...skinItems, ...gamepassItems];
         if (alive) setAllItems(combined);
       } catch {
-        // Fallback: still show items with 0 values so UI works offline/CORS
         const fruitItems: Item[] = DEFAULT_FRUIT_NAMES.map((display) => ({
           kind: "fruit",
           name: display,
           valueNumeric: 0,
-          valueRaw: "0",
+          valueRaw: money(0),
+          robuxNumeric: 0,
           image: fruitImagePath(display),
         }));
         const gamepassItems: Item[] = DEFAULT_GAMEPASSES.map((name) => ({
           kind: "gamepass",
           name,
           valueNumeric: 0,
-          valueRaw: "0",
+          valueRaw: money(0),
+          robuxNumeric: 0,
           image: gamepassImagePath(name),
         }));
         if (alive) setAllItems([...fruitItems, ...gamepassItems]);
@@ -195,7 +255,6 @@ export default function TradeCalculatorPage() {
     };
   }, []);
 
-  /* ----------------------------- Derived ----------------------------- */
   const filtered = useMemo(() => {
     const q = canon(query);
     if (!q) return allItems;
@@ -207,22 +266,13 @@ export default function TradeCalculatorPage() {
     if (s.permanent && s.item.permNumeric != null) return s.item.permNumeric;
     return s.item.valueNumeric;
   };
-  const getSlotRaw = (s: Slot) => {
-    if (!s.item) return "0";
-    if (s.permanent && s.item.permRaw) return s.item.permRaw;
-    return s.item.valueRaw;
-  };
+  const getSlotRobux = (s: Slot) => (s.item ? s.item.robuxNumeric : 0);
 
-  const yourTotal = useMemo(
-    () => your.reduce((sum, s) => sum + getSlotValue(s), 0),
-    [your]
-  );
-  const wantedTotal = useMemo(
-    () => wanted.reduce((sum, s) => sum + getSlotValue(s), 0),
-    [wanted]
-  );
+  const yourTotal = useMemo(() => your.reduce((sum, s) => sum + getSlotValue(s), 0), [your]);
+  const wantedTotal = useMemo(() => wanted.reduce((sum, s) => sum + getSlotValue(s), 0), [wanted]);
+  const yourRobux = useMemo(() => your.reduce((sum, s) => sum + getSlotRobux(s), 0), [your]);
+  const wantedRobux = useMemo(() => wanted.reduce((sum, s) => sum + getSlotRobux(s), 0), [wanted]);
 
-  /* ----------------------------- Actions ----------------------------- */
   function setSlot(side: "your" | "wanted", index: number, item?: Item) {
     const setter = side === "your" ? setYour : setWanted;
     const list = side === "your" ? your : wanted;
@@ -246,7 +296,6 @@ export default function TradeCalculatorPage() {
     setWanted(your.map((s) => ({ id: uid(), item: s.item, permanent: s.permanent })));
   }
 
-  /* ----------------------------- Render ----------------------------- */
   return (
     <main className="bf-wrap">
       <header className="tc-header">
@@ -280,7 +329,10 @@ export default function TradeCalculatorPage() {
                           {slot.item.name}
                           {slot.permanent && <span className="tc-perm-badge">PERM</span>}
                         </div>
-                        <div className="tc-chip-val">{getSlotRaw(slot)}</div>
+                        <div className="tc-chip-val">
+                          {slot.item.valueRaw}
+                          {slot.item.robuxNumeric > 0 && <div>{robux(slot.item.robuxNumeric)}</div>}
+                        </div>
                       </div>
                     </div>
                   ) : (
@@ -291,7 +343,6 @@ export default function TradeCalculatorPage() {
                   )}
                 </button>
 
-                {/* per-slot Permanent toggle (fruits only with values[1]) */}
                 {slot.item?.kind === "fruit" && slot.item.permNumeric != null && (
                   <button
                     className={`tc-toggle ${slot.permanent ? "tc-toggle-on" : ""}`}
@@ -305,7 +356,8 @@ export default function TradeCalculatorPage() {
             ))}
           </div>
           <div className="tc-footer">
-            <div>Value: <strong>${yourTotal.toLocaleString()}</strong></div>
+            <div>Value: <strong>{money(yourTotal)}</strong></div>
+            <div>Robux: <strong>{robux(yourRobux)}</strong></div>
           </div>
         </div>
 
@@ -337,7 +389,10 @@ export default function TradeCalculatorPage() {
                           {slot.item.name}
                           {slot.permanent && <span className="tc-perm-badge">PERM</span>}
                         </div>
-                        <div className="tc-chip-val">{getSlotRaw(slot)}</div>
+                        <div className="tc-chip-val">
+                          {slot.item.valueRaw}
+                          {slot.item.robuxNumeric > 0 && <div>{robux(slot.item.robuxNumeric)}</div>}
+                        </div>
                       </div>
                     </div>
                   ) : (
@@ -361,7 +416,8 @@ export default function TradeCalculatorPage() {
             ))}
           </div>
           <div className="tc-footer">
-            <div>Value: <strong>${wantedTotal.toLocaleString()}</strong></div>
+            <div>Value: <strong>{money(wantedTotal)}</strong></div>
+            <div>Robux: <strong>{robux(wantedRobux)}</strong></div>
           </div>
         </div>
       </section>
@@ -404,6 +460,9 @@ export default function TradeCalculatorPage() {
                   <div className="tc-li-val">
                     <div>Normal: {it.valueRaw}</div>
                     {it.permRaw && <div>Perm: {it.permRaw}</div>}
+                    {it.robuxNumeric != null && it.robuxNumeric > 0 && (
+                      <div>Robux: {robux(it.robuxNumeric)}</div>
+                    )}
                   </div>
                 </button>
               ))}
@@ -430,7 +489,12 @@ export default function TradeCalculatorPage() {
                     <Image src={it.image} alt="" className="tc-li-img" width={40} height={40}/>
                     <div className="tc-li-name">{it.name}</div>
                   </div>
-                  <div className="tc-li-val">Value: {it.valueRaw}</div>
+                  <div className="tc-li-val">
+                    <div>Value: {it.valueRaw}</div>
+                    {it.robuxNumeric != null && it.robuxNumeric > 0 && (
+                      <div>Robux: {robux(it.robuxNumeric)}</div>
+                    )}
+                  </div>
                 </button>
               ))}
               {filtered.filter(i => i.kind === "gamepass").length === 0 && (
