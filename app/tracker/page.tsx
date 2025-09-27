@@ -3,14 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 /* ----------------------------- Types ----------------------------- */
-type FruitValue = { numeric: number; raw: string };
 type Fruit = { id: string; name: string; valueNumeric?: number; valueRaw?: string };
 type Account = { id: string; name: string; counts: Record<string, number> };
 type SaveShape = { v: 1; fruits: Fruit[]; accounts: Account[] };
 type SearchScope = "fruits" | "accounts" | "both";
 
 const STORAGE_KEY = "bloxfruit-tracker-v1";
-const VALUES_API = "https://bfscraper.app.abledtaha.online/fruits";
+const VALUES_API = "https://bfscraper.app.abledtaha.online/all";
 
 /* ----------------------------- Utils ----------------------------- */
 const uid = () =>
@@ -33,7 +32,7 @@ const defaultFruits: Fruit[] = [
   { id: "frt-gravity", name: "Gravity" },
   { id: "frt-blizzard", name: "Blizzard" },
   { id: "frt-pain", name: "Pain" },
-  { id: "frt-lightning", name: "Lightning" }, // API uses "Rumble"
+  { id: "frt-lightning", name: "Lightning" }, // API already uses "Lightning"
   { id: "frt-portal", name: "Portal" },
   { id: "frt-phoenix", name: "Phoenix" },
   { id: "frt-sound", name: "Sound" },
@@ -85,42 +84,46 @@ function highlight(text: string, q: string) {
     </>
   );
 }
-
 // Nice compact formatter for totals (k/m/b)
 function formatCompact(n: number): string {
   if (!isFinite(n) || n === 0) return "0";
   const abs = Math.abs(n);
-  if (abs >= 1_000_000_000) return (n / 1_000_000_000).toFixed(n % 1_000_000_000 === 0 ? 0 : 2).replace(/\.00$/, "") + "b";
-  if (abs >= 1_000_000) return (n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1).replace(/\.0$/, "") + "m";
-  if (abs >= 1_000) return (n / 1_000).toFixed(n % 1_000 === 0 ? 0 : 1).replace(/\.0$/, "") + "k";
+  if (abs >= 1_000_000_000)
+    return (n / 1_000_000_000)
+      .toFixed(n % 1_000_000_000 === 0 ? 0 : 2)
+      .replace(/\.00$/, "") + "b";
+  if (abs >= 1_000_000)
+    return (n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1).replace(/\.0$/, "") + "m";
+  if (abs >= 1_000)
+    return (n / 1_000).toFixed(n % 1_000 === 0 ? 0 : 1).replace(/\.0$/, "") + "k";
   return String(n);
 }
+const slug = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-");
 
 /* ----------------------------- API mapping helpers ----------------------------- */
-// Clean a fruit name to a comparable token
-function canon(s: string) {
-  return s.toLowerCase().replace(/[\s_\-]/g, "").trim();
-}
-// Some API names differ from your list. Map API -> your canonical names.
+// Canonicalize keys for matching
+const canon = (s: string) => s.toLowerCase().replace(/[\s_\-]/g, "").trim();
+
+// API → Your fruit names
 const API_ALIASES: Record<string, string> = {
-  // API → Your fruit name
-  rumble: "Lightning",
+  rumble: "Lightning",          // legacy alias, just in case
   trex: "Trex",
   "t-rex": "Trex",
-  dragoneast: "Dragon East",
-  dragonwest: "Dragon West",
+  eastdragon: "Dragon East",
+  westdragon: "Dragon West",
 };
+
+// default name lookup by canonical
+const DEFAULT_BY_CANON: Record<string, string> = (() => {
+  const map: Record<string, string> = {};
+  for (const f of defaultFruits) map[canon(f.name)] = f.name;
+  return map;
+})();
 
 function mapApiNameToFruitName(apiName: string): string | null {
   const c = canon(apiName);
   if (API_ALIASES[c]) return API_ALIASES[c];
-
-  // Try direct canonical match against your fruit names
-  // (e.g., "phoenix", "quake", "magma", etc.)
-  const byCanon: Record<string, string> = {};
-  for (const f of defaultFruits) byCanon[canon(f.name)] = f.name;
-  if (byCanon[c]) return byCanon[c];
-
+  if (DEFAULT_BY_CANON[c]) return DEFAULT_BY_CANON[c];
   return null;
 }
 
@@ -131,7 +134,6 @@ export default function TrackerPage() {
     { id: uid(), name: "Main", counts: {} },
   ]);
 
-  const [newFruitName, setNewFruitName] = useState("");
   const [newAccountName, setNewAccountName] = useState("");
 
   // Search
@@ -178,44 +180,81 @@ export default function TrackerPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  /* ----------------------------- Fetch & merge values ----------------------------- */
+  /* ----------------------------- Fetch & merge values (incl. skins) ----------------------------- */
   useEffect(() => {
     let isMounted = true;
     (async () => {
       try {
-        const res = await fetch(VALUES_API);
+        const res = await fetch(VALUES_API, { cache: "no-store" });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
+        const data = await res.json() as {
+          fruits?: Array<{
+            name: string;
+            regValue?: number;       // regular trade value (numeric)
+            permValue?: number;      // permanent trade value (numeric)
+            skins?: Array<{
+              name: string;
+              regValue?: number;
+            }>;
+          }>;
+        };
 
-        type ApiFruit = { name: string; values?: FruitValue[] };
-        const apiFruits: ApiFruit[] = Array.isArray(data?.fruits) ? data.fruits : [];
+        const next: Fruit[] = [];
+        const pushed = new Set<string>(); // name key to avoid duplicates
 
-        // Build a map from your Fruit.name -> {numeric, raw}, using the FIRST entry of values
-        const valueMap = new Map<string, FruitValue>();
+        // Start by seeding from defaults (so order is familiar)
+        for (const base of defaultFruits) {
+          pushed.add(base.name);
+          next.push({ ...base });
+        }
 
-        for (const item of apiFruits) {
-          const targetName = mapApiNameToFruitName(item.name);
-          if (!targetName) continue;
+        // Enrich with API values & add skins as their own items
+        for (const item of data.fruits ?? []) {
+          const mappedName = mapApiNameToFruitName(item.name) ?? item.name;
+          // base fruit value: use regValue from API
+          const baseId = `frt-${slug(mappedName)}`;
+          const baseValue = typeof item.regValue === "number" ? item.regValue : undefined;
 
-          const v0 = Array.isArray(item.values) && item.values.length > 0 ? item.values[0] : null;
-          if (!v0) continue;
+          // Update existing base fruit (if present), else add it
+          const existingIdx = next.findIndex((f) => f.name === mappedName);
+          const valueRaw = typeof baseValue === "number" ? formatCompact(baseValue) : undefined;
+          if (existingIdx >= 0) {
+            next[existingIdx] = {
+              ...next[existingIdx],
+              valueNumeric: baseValue,
+              valueRaw,
+            };
+          } else if (!pushed.has(mappedName)) {
+            next.push({
+              id: baseId,
+              name: mappedName,
+              valueNumeric: baseValue,
+              valueRaw,
+            });
+            pushed.add(mappedName);
+          }
 
-          // If multiple API entries map to the same fruit (e.g., Dragon East/West),
-          // keep the higher numeric value to be conservative.
-          const prev = valueMap.get(targetName);
-          if (!prev || (typeof v0.numeric === "number" && v0.numeric > (prev.numeric ?? 0))) {
-            valueMap.set(targetName, { numeric: v0.numeric, raw: v0.raw });
+          // Skins → add as separate “fruit” rows with their own values
+          for (const sk of item.skins ?? []) {
+            const skinName = sk.name?.trim();
+            if (!skinName) continue;
+
+            const displayName = `${mappedName} - ${skinName}`;
+            if (pushed.has(displayName)) continue;
+
+            const skinVal = typeof sk.regValue === "number" ? sk.regValue : undefined;
+            next.push({
+              id: `frt-${slug(mappedName)}-skin-${slug(skinName)}`,
+              name: displayName,
+              valueNumeric: skinVal,
+              valueRaw: typeof skinVal === "number" ? formatCompact(skinVal) : undefined,
+            });
+            pushed.add(displayName);
           }
         }
 
         if (!isMounted) return;
-
-        setFruits((prev) =>
-          prev.map((f) => {
-            const v = valueMap.get(f.name);
-            return v ? { ...f, valueNumeric: v.numeric, valueRaw: v.raw } : f;
-          })
-        );
+        setFruits(next);
       } catch (err) {
         console.error("Failed to fetch fruit values:", err);
       }
@@ -321,7 +360,7 @@ export default function TrackerPage() {
       <header className="bf-header">
         <h1 className="bf-h1">Blox Fruits Inventory Tracker</h1>
         <p className="bf-muted">
-          Track how many fruits you have across all your accounts/alts. Changes
+          Track how many fruits (and skins) you have across all your accounts/alts. Changes
           are saved automatically in your browser.
         </p>
       </header>
@@ -334,7 +373,7 @@ export default function TrackerPage() {
         </div>
         <div className="bf-card">
           <div className="bf-card-label">
-            Fruits <span className="bf-muted">— showing</span>
+            Items <span className="bf-muted">— showing</span>
           </div>
           <div className="bf-card-number">
             {visibleFruits.length}/{fruits.length}
@@ -362,7 +401,7 @@ export default function TrackerPage() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder='Search ("/" to focus, Esc to clear)'
-            aria-label="Search fruits or accounts"
+            aria-label="Search fruits/skins or accounts"
             className="bf-input"
           />
           {query && (
@@ -381,21 +420,21 @@ export default function TrackerPage() {
             <button
               className={`bf-btn ${scope === "fruits" ? "bf-btn-primary" : ""}`}
               onClick={() => setScope("fruits")}
-              title="Filter fruits only (keep all accounts visible)"
+              title="Filter fruits/skins only (keep all accounts visible)"
             >
-              Fruits
+              Fruits/Skins
             </button>
             <button
               className={`bf-btn ${scope === "accounts" ? "bf-btn-primary" : ""}`}
               onClick={() => setScope("accounts")}
-              title="Filter accounts only (keep all fruits visible)"
+              title="Filter accounts only (keep all fruits/skins visible)"
             >
               Accounts
             </button>
             <button
               className={`bf-btn ${scope === "both" ? "bf-btn-primary" : ""}`}
               onClick={() => setScope("both")}
-              title="Filter fruits and accounts together"
+              title="Filter fruits/skins and accounts together"
             >
               Both
             </button>
@@ -414,7 +453,7 @@ export default function TrackerPage() {
             aria-label="Account name"
             className="bf-input"
           />
-        <button onClick={addAccount} className="bf-btn bf-btn-primary">
+          <button onClick={addAccount} className="bf-btn bf-btn-primary">
             Add Account
           </button>
         </div>
@@ -430,7 +469,7 @@ export default function TrackerPage() {
           <p className="bf-muted">
             {query
               ? "No matches in this scope. Try a different term or switch scope."
-              : "Add at least one fruit and one account to use the grid."}
+              : "Add at least one fruit/skin and one account to use the grid."}
           </p>
         ) : (
           <div className="bf-scroll-x">
@@ -447,7 +486,7 @@ export default function TrackerPage() {
                             total: {totalsByFruitVisible[f.id] || 0}
                           </span>
                           {typeof f.valueRaw === "string" && (
-                            <span className="bf-value-pill" title="Market value (per fruit)">
+                            <span className="bf-value-pill" title="Market value (per item)">
                               value: {f.valueRaw}
                             </span>
                           )}
@@ -520,7 +559,7 @@ export default function TrackerPage() {
                         );
                       })}
                       <td className="bf-td bf-td-number">{rowTotal}</td>
-                      <td className="bf-td bf-td-number" title="Sum of (count × value) across visible fruits">
+                      <td className="bf-td bf-td-number" title="Sum of (count × value) across visible items">
                         {formatCompact(rowValue)}
                       </td>
                       <td className="bf-td">
@@ -546,7 +585,7 @@ export default function TrackerPage() {
                   <td className="bf-td bf-td-number bf-strong">
                     {grandTotalVisible}
                   </td>
-                  <td className="bf-td bf-td-number bf-strong" title="Grand total value for visible fruits & accounts">
+                  <td className="bf-td bf-td-number bf-strong" title="Grand total value for visible items & accounts">
                     {formatCompact(grandValueVisible)}
                   </td>
                   <td className="bf-td" />
